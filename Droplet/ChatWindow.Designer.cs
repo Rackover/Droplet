@@ -84,7 +84,6 @@
             this.ClientSize = new System.Drawing.Size(522, 453);
             this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.inputBox);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             this.MaximizeBox = false;

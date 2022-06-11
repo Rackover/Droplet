@@ -20,11 +20,14 @@
         Server server;
         SoundPlayer player = new SoundPlayer(Properties.Resources.snd_message);
         bool isWizzing = false;
+        bool shouldDie = false;
 
         readonly Color myColor;
         readonly Color otherColor;
         readonly Scanner.Computer other;
         readonly Scanner.Computer me;
+
+        List<Task> tasks = new List<Task>();
 
         public ChatWindow(Scanner.Computer me, Color myColor, Scanner.Computer other, Color otherColor, Server server)
         {
@@ -40,9 +43,9 @@
             inputBox.Enabled = false;
             chatLogWindow.LinkClicked += ChatLogWindow_LinkClicked;
 
-            Text = $"{other} - droplet v{Program.VERSION}";
+            Text = $"{other} - Droplet v{Program.VERSION}";
 
-            Task.Run(InitializeChat);
+            tasks.Add(Task.Run(InitializeChat));
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -64,13 +67,13 @@
                         }
 
                         client?.Send($"/image {final}");
+
+                        return true;
                     }
-
-                    return true;
-
-                default:
-                    return base.ProcessCmdKey(ref msg, keyData);
+                    break;
             }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         private void ChatLogWindow_LinkClicked(object sender, LinkClickedEventArgs e)
@@ -94,6 +97,9 @@
 
             while (client == null) {
                 try {
+                    if (shouldDie) return;
+                    if (!chatLogWindow.Created) continue;
+
                     AppendLine($"Connecting to {other}...");
                     client = new Client(other.Netbios);
                 }
@@ -103,6 +109,8 @@
             }
 
             while (otherClient == null) {
+                if (shouldDie) return;
+
                 otherClient = server.GetOtherClient(other.Netbios);
 
                 if (otherClient == null) {
@@ -111,12 +119,12 @@
                 }
             }
 
-            Action action = () =>
+            void action()
             {
                 inputBox.Enabled = true;
 
                 AppendLine($"Connected to {other}!");
-            };
+            }
 
             if (this.InvokeRequired) {
                 this.Invoke(action);
@@ -131,7 +139,7 @@
             if (client == otherClient) {
                 // Should close the window maybe?
                 AppendLine($"Client {other} is dead: {e.Message}. Attempting reconnection...");
-                _ = AttemptConnect();
+                tasks.Add(AttemptConnect());
             }
         }
 
@@ -155,7 +163,7 @@
             }
         }
 
-        public void Server_OnMessageReceived(System.Net.Sockets.TcpClient client, string message)
+        public void Server_OnMessageReceived(TcpClient client, string message)
         {
             if (client != otherClient) return;
             if (!Visible) return;
@@ -203,7 +211,7 @@
 
             try
             {
-                using (System.IO.MemoryStream ms = new System.IO.MemoryStream(data))
+                using (MemoryStream ms = new System.IO.MemoryStream(data))
                 {
                     image = Image.FromStream(ms);
                 }
@@ -215,23 +223,19 @@
 
             if (image != null)
             {
-                Action setImage = () =>
+                void setImage()
                 {
                     Clipboard.SetImage(image);
 
-                    if (Clipboard.ContainsImage())
-                    {
+                    if (Clipboard.ContainsImage()) {
                         DataFormats.Format format = DataFormats.GetFormat(DataFormats.Bitmap);
 
                         chatLogWindow.ReadOnly = false;
-                        if (chatLogWindow.CanPaste(format))
-                        {
-                            if (local)
-                            {
+                        if (chatLogWindow.CanPaste(format)) {
+                            if (local) {
                                 AppendLine($"<{me}>", myColor);
                             }
-                            else
-                            {
+                            else {
                                 AppendLine($"<{other}>", otherColor);
                             }
 
@@ -243,7 +247,7 @@
                     }
 
                     image.Dispose();
-                };
+                }
 
                 this?.Invoke(setImage);
             }
@@ -255,7 +259,11 @@
 
         private void AppendLine(string line, Color color)
         {
-            Action write = () =>
+            if (!chatLogWindow.Created) {
+                return;
+            }
+
+            void write()
             {
                 chatLogWindow.SelectionColor = color;
                 chatLogWindow.AppendText($"{line}");
@@ -264,11 +272,11 @@
 
                 // Scroll to end
                 chatLogWindow.ScrollToCaret();
-            };
+            }
 
-            if (this.InvokeRequired)
+            if (chatLogWindow.InvokeRequired)
             {
-                this.Invoke(write);
+                chatLogWindow.Invoke(write);
             }
             else
             {
@@ -308,6 +316,12 @@
 
         protected override void OnClosed(EventArgs e)
         {
+            AppendLine("Awaiting completing tasks before closing, please wait...");
+            shouldDie = true;
+            Task.WaitAll(tasks.ToArray());
+
+            tasks.Clear();
+
             server.OnMessageReceived -= Server_OnMessageReceived;
             client?.Dispose();
             base.OnClosed(e);

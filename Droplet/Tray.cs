@@ -20,8 +20,7 @@
         public Tray()
         {
             // Initialize Tray Icon
-            trayIcon = new NotifyIcon()
-            {
+            trayIcon = new NotifyIcon() {
                 Icon = Resources.droplet,
                 Visible = true
             };
@@ -39,8 +38,7 @@
 
         private void Server_OnClientConnected(System.Net.Sockets.TcpClient arg1, string hostName)
         {
-            if (arg1 != null && hostName.Length != 0)
-            {
+            if (arg1 != null && hostName.Length != 0) {
                 lock (scanner.Computers) {
                     for (int i = 0; i < scanner.Computers.Length; i++) {
                         if (scanner.Computers[i].Netbios == hostName) {
@@ -80,12 +78,14 @@
 
         private void GenerateContextMenuStrip(Scanner.Computer[] computers)
         {
+            // Here we could be in any thread
+            // ... which I guess is OK because ApplicationContext does not have Invoke() nor InvokeRequired
+            //   so if this did not work, we would be stuck
+
             var strip = new ContextMenuStrip();
 
-            if (computers.Length > 0)
-            {
-                for (int i = 0; i < computers.Length; i++)
-                {
+            if (computers.Length > 0) {
+                for (int i = 0; i < computers.Length; i++) {
                     Scanner.Computer computer = computers[i];
                     strip.Items.Add(new ToolStripButton(computer.ToString(), null, (a, b) =>
                     {
@@ -98,15 +98,13 @@
 
             strip.Items.Add(new ToolStripButton("Exit", null, Exit));
 
-
-
             trayIcon.ContextMenuStrip = strip;
         }
 
         ChatWindow ChatWith(Scanner.Computer computer)
         {
             Color myColor = Color.Blue;
-            Color otherColor = Color.DarkOrange;
+            Color otherColor = Color.Purple;
 
             string me = Environment.MachineName.ToUpper();
             string other = computer.ToString().ToUpper();
@@ -116,9 +114,34 @@
             if (me == "RACKOVER-770") myColor = Color.DeepPink;
             if (other == "RACKOVER-770") otherColor = Color.DeepPink;
 
-            var window = new ChatWindow(scanner.Me, myColor, computer, otherColor, server);
-            window.Show();
-            netbiosChatting.Add(computer.Netbios, window);
+            ChatWindow window;
+
+            if (netbiosChatting.TryGetValue(me, out window)) {
+                lock (netbiosChatting) {
+                    netbiosChatting.Remove(me);
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Showing window");
+
+            var context = TaskScheduler.FromCurrentSynchronizationContext();
+
+            Task.Factory.StartNew(() =>
+                {
+                    window = new ChatWindow(scanner.Me, myColor, computer, otherColor, server);
+                    window.Show();
+                }, 
+                System.Threading.CancellationToken.None,
+                TaskCreationOptions.None,
+                context
+            );
+
+            //trayIcon.ContextMenuStrip.Invoke(showChatWindow);
+
+
+            lock (netbiosChatting) {
+                netbiosChatting.Add(computer.Netbios, window);
+            }
 
             return window;
         }
