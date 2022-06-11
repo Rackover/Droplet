@@ -1,6 +1,6 @@
 # ![icon](Droplet/static/icon.png) Droplet
 A simple TCP-based LAN-only messaging system. Short and simple, realtime only, decentralized.
-Uses UDP for discovery (broadcasting on every interface). If you message someone who have not discovered you, their instance of droplet will automatically discover them for a short while.
+Uses UDP for discovery (broadcasting on every interface). If you message someone who have not discovered you, their instance of droplet will automatically discover you for a short while.
 
 Works on port 2999 and needs both TCP (messaging) and UDP (discovery) going. 
 Not working? Check out your firewall... first culprit!
